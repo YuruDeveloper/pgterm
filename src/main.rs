@@ -1,6 +1,5 @@
 mod command_arguments;
 mod tls_server_config;
-mod tracing_setup;
 
 use crate::command_arguments::CommandArguments;
 use anyhow::{anyhow, bail};
