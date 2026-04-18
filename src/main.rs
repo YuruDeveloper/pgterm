@@ -11,7 +11,6 @@ use tokio::io::{self, split, AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::rustls::ServerConfig;
 use tokio_rustls::{TlsAcceptor, TlsStream};
-use tracing::Instrument;
 use uuid::Uuid;
 
 // References:
@@ -26,25 +25,17 @@ use uuid::Uuid;
 // Google - Cloud SQL: https://github.com/brianc/node-postgres-docs/issues/79#issuecomment-1553759056
 
 #[tokio::main]
-#[tracing::instrument(name = "pgterm")]
 async fn main() -> anyhow::Result<()> {
     let args: CommandArguments = CommandArguments::parse();
     // We observed that the program would output nothing (stdout/stderr) upon tracing init failure,
     // when using stderr as the writer.
     // Let's panic when we fail to initialize tracing, which will surely print to stderr.
-    tracing_setup::init(args.log_level).expect("Failed to initialize tracing.");
-    tracing::info!("Hello from pgterm. Starting up!");
-
-    tracing::info!("Fetching Server Config.");
     let tls_server_config = tls_server_config::server_config(
         &args.server_certificate_path,
         &args.server_private_key_path,
     )?;
-    tracing::info!("Fetched Server Config.");
-    tracing::info!("Fetching Client Config.");
 
     let listener = TcpListener::bind(format!("0.0.0.0:{}", &args.server_port)).await?;
-    tracing::info!(port = ?args.server_port, "Listening");
     while let Ok((inbound_tcp_stream, _)) = listener.accept().await {
         let request_id = Uuid::new_v4().to_string();
 
@@ -64,21 +55,10 @@ async fn main() -> anyhow::Result<()> {
         tokio::spawn(async move {
             match task.await {
                 Ok(Ok(())) => {
-                    tracing::info!(request_id = %request_id_for_join, "Task completed successfully.");
                 }
                 Ok(Err(e)) => {
-                    tracing::error!(
-                        ?e,
-                        request_id = %request_id_for_join,
-                        "Task failed with an error."
-                    );
                 }
                 Err(e) => {
-                    tracing::error!(
-                        ?e,
-                        request_id = %request_id_for_join,
-                        "Task panicked or was cancelled."
-                    );
                 }
             }
         });
@@ -102,26 +82,12 @@ async fn handle_inbound_request(
     connection_port: String,
     request_id: String,
 ) -> anyhow::Result<()> {
-    tracing::info!(
-        ?request_id,
-        "Accepting inbound connection from PG client. Proceeding to handshake.",
-    );
     let inbound_tls_stream = inbound_handshake(inbound_stream, server_config, &request_id).await?;
-
-    tracing::info!(
-        ?request_id,
-        "Inbound TLS OK. Proceeding to outbound connection to PG server.",
-    );
     let outbound_connect = outbound_connection(
         &connection_host_or_ip,
         &connection_port,
     )
     .await?;
-
-    tracing::info!(
-        ?request_id,
-        "Outbound TLS OK. Proceeding to join inbound and outbound connection.",
-    );
     join(inbound_tls_stream, outbound_connect, &request_id).await?;
 
     Ok(())
@@ -139,7 +105,6 @@ async fn inbound_handshake(
         // tell pgClient we do not support plaintext connections
         inbound_stream.write_all(b"N").await?;
         let err_msg = "TLS not supported by PG client on inbound connection";
-        tracing::error!("{err_msg}");
         bail!("{err_msg}. RequestId: {request_id}");
     }
     // tell pgClient we're proceeding with TLS
@@ -167,7 +132,6 @@ async fn outbound_connection(
     Ok(outbound_stream)
 }
 
-#[tracing::instrument(skip_all)]
 async fn join(
     inbound: TlsStream<TcpStream>,
     outbound: TcpStream,
@@ -180,11 +144,9 @@ async fn join(
 
     match result {
         Ok(_) => {
-            tracing::info!(?request_id, "Connection closed gracefully.");
             Ok(())
         }
         Err(e) => {
-            tracing::error!(?e, ?request_id, "Connection aborted due to an error.");
             Err(e.into())
         }
     }
