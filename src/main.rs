@@ -46,8 +46,7 @@ async fn main() -> anyhow::Result<()> {
                 args.client_connection_host_or_ip.to_owned(),
                 args.client_connection_port.to_owned(),
                 request_id_for_task,
-            )
-            .in_current_span(),
+            ),
         );
 
         let request_id_for_join = request_id.clone();
@@ -66,14 +65,6 @@ async fn main() -> anyhow::Result<()> {
     bail!("Something went wrong with the listener! Exiting program.")
 }
 
-#[tracing::instrument(
-    skip_all,
-    fields(
-        addr = connection_host_or_ip,
-        port = connection_port,
-        request_id = request_id,
-    )
-)]
 async fn handle_inbound_request(
     inbound_stream: TcpStream,
     server_config: ServerConfig,
@@ -92,7 +83,6 @@ async fn handle_inbound_request(
     Ok(())
 }
 
-#[tracing::instrument(skip_all)]
 async fn inbound_handshake(
     mut inbound_stream: TcpStream,
     server_config: ServerConfig,
@@ -117,7 +107,6 @@ async fn inbound_handshake(
     Ok(stream)
 }
 
-#[tracing::instrument(skip_all)]
 async fn outbound_connection(
     connection_host_or_ip: &str,
     connection_port: &str,
